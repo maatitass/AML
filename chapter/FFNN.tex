@@ -1,0 +1,1614 @@
+\chapter{Feed Forward Neural Network}
+
+\section{From Linear Models to Feedforward Networks}
+The essence of supervised machine learning is the creation of functions that can analyze
+examples (instances) and produce generalizations on unseen data. During training, our goal
+is to learn parameters $\theta$ such that the model $f(x; \theta)$ approximates the true
+underlying \textbf{target function} $f^*(x)$. In supervised problems, each training input
+$x \in \mathbb{R}^d$ is paired with a label $y \sim f^*(x)$, and the model must produce a
+prediction $\hat{y}$ close to $y$.
+\begin{note}
+    We write $y \sim f^*(x)$ rather than $y = f^*(x)$ because real-world observations
+    contain noise, and we want a model that captures the underlying regularity and
+    generalizes to unseen data rather than memorizing noise.
+\end{note}
+
+Searching over all possible functions is inherently intractable. To make learning
+manageable, we restrict our search to specific families of functions, referred to as
+\textbf{hypothesis classes}.
+
+\subsection{Models with a Linear Score}
+The simplest hypothesis class consists of \textbf{generalized linear models}, which
+compute a linear score $z = w^T x + b$ and pass it through a monotonic output function
+to produce the prediction $\hat{y}$:
+\begin{itemize}
+    \item \textbf{Identity function}: Used for linear regression, outputting $\hat{y} = z \in \mathbb{R}$.
+    \item \textbf{Sign function}: Used for hard binary classification:
+          \begin{equation}
+              \hat{y} = \text{sign}(w^T x + b) \in \{-1, +1\}
+          \end{equation}
+    \item \textbf{Sigmoid function}: Used for binary classification when calibrated
+          probabilities are required (logistic regression):
+          \begin{equation}
+              \hat{y} = \sigma(z) = \frac{1}{1+e^{-(w^T x + b)}} \in (0, 1)
+          \end{equation}
+    \item \textbf{Softmax}: Used for multi-class classification across $k$ classes,
+          producing a probability vector from $k$ linear scores $z = W^T x + b$:
+          \begin{equation}
+              \hat{y}_i = \text{softmax}(z)_i = \frac{e^{z_i}}{\sum_{j=1}^k e^{z_j}}
+          \end{equation}
+\end{itemize}
+
+\begin{note}
+    \textbf{Why linear-score models always have flat decision boundaries.} Even though
+    the sigmoid and softmax functions are non-linear, they only rescale the linear score
+    $z$ into $[0,1]$. In binary classification, the decision boundary $\hat{y} = 0.5$
+    corresponds to $z = w^T x + b = 0$, which is still a flat hyperplane in the input
+    space. Similarly, in softmax classification, the boundary between class $i$ and class
+    $j$ is the hyperplane $(w_i - w_j)^T x + (b_i - b_j) = 0$. Because there is no
+    interaction term between features (such as $x_1 x_2$), the sensitivity to $x_1$ is
+    constant regardless of the value of $x_2$.
+\end{note}
+
+\textbf{Pros} of linear models: their loss landscape is convex, meaning they can be fit
+efficiently and reliably with a single guaranteed global minimum.
+
+\textbf{Cons} of linear models: they can only separate classes whose boundary is a flat
+hyperplane, failing on any non-linearly separable pattern unless the input space is first
+transformed.
+
+\subsection{Three Ways to Choose the Representation \texorpdfstring{$\phi(x)$}{phi(x)} and the Kernel Trick}
+If the target function $f^*(x)$ is \textbf{non-linear}, a linear model working directly
+on the raw input $x$ cannot approximate it. One strategy to solve a non-linear problem
+with a linear predictor is to apply a \textbf{non-linear transformation} $\phi(x)$ to the
+input space, mapping each instance $x \in \mathbb{R}^d$ into a new feature vector $\phi(x)$.
+There are three main ways to obtain $\phi(x)$:
+\begin{itemize}
+    \item \textbf{Fixed generic transformations (e.g., kernels or polynomials)}: We use a
+          predefined $\phi(x)$. While simple, generic expansions (like adding all polynomial
+          interactions $x_i x_j$) suffer from a combinatorial explosion in high dimensions
+          and do not adapt to the specific structure of the task.
+    \item \textbf{Manually engineered features}: Domain experts hand-craft $\phi(x)$ for a
+          specific application. This requires heavy human effort and does not transfer
+          to new domains.
+    \item \textbf{Learned representations (Deep Learning)}: We parameterize the feature
+          map as $\phi(x; \theta)$ and learn its parameters $\theta$ directly from data
+          alongside the final linear predictor $\omega$:
+          \begin{equation}
+              f(x; \theta, \omega) = \phi(x; \theta)^T \cdot \omega
+          \end{equation}
+\end{itemize}
+\begin{note}
+    In a deep learning model, $\phi(x; \theta)$ corresponds to the hidden layers: they
+    learn to deform the input space so that the final output layer only needs to apply a
+    linear model.
+\end{note}
+
+\paragraph{Kernel trick}
+Transforming the input space into a higher-dimensional space using a fixed $\phi(x)$ can
+make non-linearly separable data linearly separable, but computing $\phi(x)$ explicitly in
+high (or infinite) dimensions can be computationally prohibitive. To overcome this, we use
+\textbf{kernels}.
+
+\begin{note}
+    Many transformations can make data linearly separable in higher dimensions, but only
+    functions corresponding to an inner product in some feature space qualify as valid kernels.
+\end{note}
+
+The \textbf{kernel trick} allows us to operate in the high-dimensional feature space
+without ever computing the coordinates $\phi(x)$ explicitly. By rewriting the weight
+vector as a linear combination of the $m$ training instances, a linear model becomes:
+\begin{equation}
+    \omega^T x + b = b + \sum_{i=1}^m \alpha_i x^T x^{(i)}
+\end{equation}
+where $b$ is the bias, $\alpha_i$ is a learned coefficient, and $x^{(i)}$ is the $i$-th
+training instance. Replacing $x$ with $\phi(x)$ yields:
+\begin{equation}
+    f(x) = b + \sum_{i=1}^m \alpha_i \phi(x)^T \phi(x^{(i)}) = b + \sum_{i=1}^m \alpha_i k(x, x^{(i)})
+\end{equation}
+The kernel function $k(x, x^{(i)}) = \phi(x)^T \phi(x^{(i)})$ computes the inner product
+directly in the original input space. Because $\phi$ is fixed, optimization with respect
+to $\alpha_i$ remains convex. In Support Vector Machines (SVMs), $\alpha_i \neq 0$ only
+for a sparse subset of training points called \textbf{support vectors}. Any algorithm
+built on this principle is called a \textbf{kernel machine} or \textbf{kernel method}.
+
+\subsection{The XOR Problem}
+The classic example showing why linear models fail—and why we need a learned representation—is
+the \textbf{XOR function}. Given two binary inputs $(x_1, x_2) \in \{0,1\}^2$, XOR outputs
+$y = 1$ when the inputs differ, $(0,1)$ and $(1,0)$, and $y = 0$ when they are equal,
+$(0,0)$ and $(1,1)$.
+
+No straight line can separate the positive points from the negative ones. Suppose a linear
+score $z = w_1 x_1 + w_2 x_2 + b$ is negative at $(0,0)$ and $(1,1)$, and positive at
+$(0,1)$ and $(1,0)$:
+\begin{itemize}
+    \item At $(0,0)$: $b < 0$.
+    \item At $(1,0)$ and $(0,1)$: $w_1 + b > 0$ and $w_2 + b > 0$. Summing these two
+          inequalities gives $w_1 + w_2 + 2b > 0$, which implies $w_1 + w_2 + b > -b > 0$.
+    \item Yet at $(1,1)$, we need $w_1 + w_2 + b < 0$, which is a direct contradiction.
+\end{itemize}
+If we fit a linear regression model with Mean Squared Error on the four XOR points, the
+model compromises by setting $w_1 = w_2 = 0$ and $b = 0.5$, predicting $\hat{y} = 0.5$
+everywhere.
+
+\subsection{The Multilayer Perceptron: Composition of Functions}
+To overcome the limitations of linear models without relying on hand-crafted features, the
+\textbf{Feed Forward Neural Network} (FFNN), also called \textbf{Multilayer Perceptron (MLP)},
+arranges layers of units in a chain where each layer feeds directly into the next one
+without feedback loops. We can think of each layer as a vector-to-vector function.
+
+Overall, a FFNN is a composition of functions, where each function corresponds to a
+layer. For example, a network with three layers approximating a function $f(x)$ takes the form:
+\begin{equation*}
+    f(x) = f^{(3)}(f^{(2)}(f^{(1)}(x)))
+\end{equation*}
+where $f^{(i)}$ is the function computed by the $i$-th layer. The total number of layers
+in this chain is the \textbf{depth} of the model, while the dimensionality (number of units)
+of the hidden layers is called the \textbf{width} of the model. The training data only
+specifies what the output layer should do at each point $x$; it does not directly tell the
+intermediate layers what to compute. They are called \textbf{hidden layers} precisely
+because the learning algorithm must decide on its own how to use them to build an effective
+internal representation of the input.
+
+Inside each layer $l \in \{1, \dots, L\}$, a set of neurons (or \textbf{units}) receives
+the activations $h^{(l-1)}$ from the previous layer (with $h^{(0)} = x$) and performs two
+simple steps:
+\begin{enumerate}
+    \item It computes an affine transformation called the \textbf{pre-activation}:
+          \begin{equation*}
+              z^{(l)} = W^{(l)T} h^{(l-1)} + b^{(l)}
+          \end{equation*}
+    \item It applies a component-wise non-linear \textbf{activation function} $g(\cdot)$
+          to produce the layer's \textbf{activation} $h^{(l)} = g(z^{(l)})$.
+\end{enumerate}
+The pre-activation $z^{(L)}$ of the final layer, right before the output function is
+applied, is commonly referred to as the \textbf{logit} (or linear score). If layer $l$
+maps $d_{l-1}$ inputs to $d_l$ units, it contains $(d_{l-1} + 1)d_l$ learnable parameters
+(weights plus biases); when the input dimension is large, most of the network's parameters
+typically reside in the very first layer.
+
+\begin{note}
+    \textbf{Without non-linearity, depth adds nothing.} If the activation function $g(z)$
+    were linear ($g(z) = z$), stacking multiple layers would collapse algebraically into a
+    single linear transformation:
+    \begin{equation*}
+        W_2^T(W_1^T x + b_1) + b_2 = \underbrace{(W_1 W_2)^T}_{W'^T} x + \underbrace{(W_2^T b_1 + b_2)}_{b'}
+    \end{equation*}
+    A deep linear network can only represent the exact same functions as a single-layer
+    linear model. Non-linear activations between layers are essential to make the composition
+    strictly more expressive than its individual parts.
+\end{note}
+
+\subsection{Solving XOR and Hidden Units as Feature Detectors}
+A feedforward network with \textbf{one hidden layer of two ReLU units} ($g(z) = \max(0, z)$)
+solves XOR effortlessly by transforming the representation:
+\begin{equation*}
+    h = \max\left(0, \, \begin{bmatrix} 1 & 1 \\ 1 & 1 \end{bmatrix} \begin{bmatrix} x_1 \\ x_2 \end{bmatrix} + \begin{bmatrix} 0 \\ -1 \end{bmatrix}\right), \qquad
+    \hat{y} = \begin{bmatrix} 1 & -2 \end{bmatrix} h
+\end{equation*}
+Here, the first hidden unit $h_1 = \max(0, x_1 + x_2)$ activates whenever at least one
+input is $1$ (acting like an OR detector), while the second unit $h_2 = \max(0, x_1 + x_2 - 1)$
+activates only when both inputs are $1$ (acting like an AND detector).
+
+\begin{figure}[!ht]
+    \centering
+    \begin{tikzpicture}[scale=1.15]
+        % Left plot: Input Space
+        \draw[->, thick] (-0.3,0) -- (2.2,0) node[right] {$x_1$};
+        \draw[->, thick] (0,-0.3) -- (0,2.0) node[above] {$x_2$};
+        \node[above] at (1.0, 2.1) {\textbf{Input Space $(x_1, x_2)$}};
+        
+        % Points in input space
+        \filldraw[blue!70!black] (0,0) circle (3pt) node[below left] {$(0,0)$};
+        \filldraw[blue!70!black] (1.4,1.4) circle (3pt) node[above right] {$(1,1)$};
+        \filldraw[red!80!black] (0,1.4) circle (3pt) node[above left] {$(0,1)$};
+        \filldraw[red!80!black] (1.4,0) circle (3pt) node[below right] {$(1,0)$};
+        \node[font=\footnotesize, gray!80!black] at (1.0, -0.7) {Not linearly separable};
+
+        % Arrow between spaces
+        \draw[->, very thick, darkgray] (2.8, 0.8) -- (4.3, 0.8) node[midway, above, font=\footnotesize] {$h = \text{ReLU}(W^{(1)T}x + b^{(1)})$};
+
+        % Right plot: Hidden Space
+        \begin{scope}[xshift=5.2cm]
+            \draw[->, thick] (-0.3,0) -- (3.0,0) node[right] {$h_1$};
+            \draw[->, thick] (0,-0.3) -- (0,2.0) node[above] {$h_2$};
+            \node[above] at (1.3, 2.1) {\textbf{Hidden Space $(h_1, h_2)$}};
+            
+            % Separating line in hidden space
+            \draw[dashed, thick, teal!80!black] (0.6, -0.2) -- (2.2, 1.8) node[right, font=\footnotesize] {Linear cut};
+            
+            % Points in hidden space
+            \filldraw[blue!70!black] (0,0) circle (3pt) node[below left] {$(0,0)$};
+            \filldraw[red!80!black] (1.2,0) circle (3.5pt) node[below] {$(0,1) \text{ \& } (1,0) \to (1,0)$};
+            \filldraw[blue!70!black] (2.4,1.2) circle (3pt) node[above left] {$(1,1) \to (2,1)$};
+            \node[font=\footnotesize, teal!70!black] at (1.4, -0.7) {Linearly separable};
+        \end{scope}
+    \end{tikzpicture}
+    \caption{The hidden layer solves XOR by mapping both positive points $(0,1)$ and $(1,0)$ onto the same point $(1,0)$ in the hidden space $h$, where a single linear cut separates the classes.}
+    \label{fig:xor_space}
+\end{figure}
+
+As shown in Figure \ref{fig:xor_space}, the hidden layer does not bend the output
+classifier; instead, it folds the input space so that $(0,1)$ and $(1,0)$ land on the
+exact same point $h = (1,0)$ in the new representation space, where a simple linear cut
+separates the classes.
+
+\begin{note}
+    \textbf{Why width helps optimization.} Even though $2$ hidden ReLU units are enough
+    to represent XOR on paper, training a $2$-unit network from random initialization via
+    gradient descent often fails: if a unit randomly starts with $z < 0$ on all four points,
+    its gradient is zero everywhere and it stays dead. Using a slightly wider layer (e.g.,
+    $8$ or $16$ units) gives gradient descent many redundant candidate units, so nearly
+    every random initialization converges to $100\%$ accuracy.
+\end{note}
+
+More generally, each hidden unit acts as a \textbf{feature detector}. Because the dot
+product $z = w^T x + b = \|w\|\|x\|\cos\theta + b$ is maximized when the input $x$ aligns
+with the weight vector $w$, a hidden unit acts as a template matcher that fires strongly
+when a specific pattern is present in the input (such as a stroke or an edge) and stays
+quiet otherwise. In a deep network, successive layers compose these features hierarchically:
+the first layer detects simple local patterns, the second combines them into parts or
+corners, and deeper layers assemble abstract concepts.
+
+\section{Learning: Cost Functions and Output Units}
+The training process can be summarized as follows: initially, the network's weights are
+randomly initialized. Then, for each training example $(x, y)$, the network computes a
+forward pass to produce $\hat{y} = f(x; \theta)$. Next, the error $\mathcal{L}(\hat{y}, y)$
+is evaluated, and all weights are adjusted in the direction that reduces the error using
+the gradient computed via \textbf{backpropagation}.
+
+\begin{definition}[\textbf{Loss function}]
+    A \textbf{loss function} $\mathcal{L}(\hat{y}, y)$ maps the model's prediction on a
+    single data point and its true target to a scalar real number that quantifies the error
+    on that specific example.
+\end{definition}
+\begin{definition}[\textbf{Cost function}]
+    A \textbf{cost function} $J(\theta)$ is the average loss computed over the entire
+    training dataset (often combined with a regularization term), representing the overall
+    objective that the learning algorithm seeks to minimize.
+\end{definition}
+
+\subsection{Gradient-Based Learning and Non-Convex Landscapes}
+To measure the discrepancy between the learned function and the true targets over the $n$
+training samples, we define the objective (cost) function:
+\begin{equation}
+    J(\theta) = \frac{1}{n} \sum_{i=1}^n \mathcal{L}(x_i; y_i; \theta)
+\end{equation}
+Training seeks the optimal parameters $\hat{\theta}$ that minimize $J(\theta)$:
+\begin{equation}
+    \hat{\theta} = \argmin_{\theta} J(\theta) = \argmin_{\theta} \frac{1}{n}
+    \sum_{i=1}^n \mathcal{L}(x_i; y_i; \theta)
+\end{equation}
+
+To minimize the objective function, we compute the \textbf{gradient} $\nabla_\theta J(\theta)$,
+a vector whose $i$-th component is the partial derivative $\frac{\partial J}{\partial \theta_i}$
+measuring how the cost changes when parameter $\theta_i$ varies slightly. Because the
+gradient points in the direction of steepest increase, \textbf{gradient descent} steps in
+the opposite direction:
+\begin{equation}
+    \theta' = \theta - \eta \nabla_\theta J(\theta)
+\end{equation}
+where $\eta > 0$ is the \textbf{learning rate} controlling the step size.
+
+\begin{note}
+    \textbf{Convex vs. Non-Convex Landscapes.} For linear models, $J(\theta)$ is a convex
+    bowl with a single global minimum that gradient descent is guaranteed to reach from
+    any starting point. In deep neural networks, the non-linear activations in the hidden
+    layers make $J(\theta)$ \textbf{non-convex}, creating a landscape with many local
+    minima and saddle points where the final solution depends on the initialization of $\theta$.
+\end{note}
+
+Because non-convex objectives have no closed-form solution, we rely on iterative numerical
+optimization. A practical strategy is to start with a moderately large learning rate $\eta$
+to make fast initial progress and escape shallow regions, and then gradually decay $\eta$
+so the parameters can settle near a minimum.
+
+To reduce the risk of overfitting, a \textbf{regularization term} can be added
+to the objective function:
+\begin{equation}
+    \hat{\theta} = \argmin_{\theta} \frac{1}{n} \sum_{i=1}^n \mathcal{L}(x_i; y_i; \theta)
+    + \lambda R(\theta)
+\end{equation}
+where $\lambda$ is a hyperparameter that balances the trade-off between fitting the data
+and keeping the model simple, and $R(\theta)$ penalizes model complexity. Regularization
+can also be applied implicitly through architectural or data choices, such as disabling
+random connections (dropout) or injecting noise into the inputs.
+\begin{note}
+    Networks with smaller weights tend to generalize better than those with larger
+    weights because small perturbations or noise in the input produce much smaller
+    fluctuations in the output.
+\end{note}
+
+\subsection{Minibatch Stochastic Gradient Descent}
+Computing the exact gradient over the entire training dataset (\textbf{full-batch} gradient
+descent) costs $\mathcal{O}(n)$ per step, which is prohibitively slow when $n$ ranges
+from thousands to billions of examples. \textbf{Stochastic Gradient Descent} (SGD) removes
+this bottleneck by estimating the gradient on a small, randomly drawn subset of data at
+each step.
+
+At one extreme, \textbf{Online Learning} ($m = 1$) updates the weights after a single
+example; updates are immediate, but the gradient estimate is very noisy and fails to
+exploit GPU parallelism. In practice, we use \textbf{mini-batch SGD}, drawing a small
+random subset of $m$ examples (typically $32 \leq m \leq 512$) and computing the average
+gradient:
+\begin{equation}
+    g = \frac{1}{m} \sum_{i = 1}^{m} \nabla_{\theta} \mathcal{L}(x_i, y_i, \theta)
+\end{equation}
+followed by the parameter update:
+\begin{equation}
+    \theta = \theta - \eta g
+\end{equation}
+One complete pass through all $n$ training examples (consisting of $n/m$ mini-batch steps)
+is called an \textbf{epoch}.
+
+Why do small mini-batches work so well? Because the mini-batch gradient $g$ is an
+\textbf{unbiased} estimator of the true gradient ($\mathbb{E}[g] = \nabla_\theta J(\theta)$),
+and its standard deviation (the gradient noise) shrinks proportionally to $1/\sqrt{m}$.
+This square-root law implies diminishing returns for very large batches: using $100\times$
+more examples per step costs $100\times$ more computation but reduces gradient noise by
+only $10\times$. Taking many fast, slightly noisy steps with a moderate mini-batch size
+converges much faster in wall-clock time than taking one slow, exact step.
+
+\subsection{Maximum Likelihood and Loss Functions}
+Rather than picking a loss function arbitrarily, deep learning derives the loss from a
+single unifying principle: \textbf{Maximum Likelihood Estimation (MLE)}. Instead of
+viewing the network as outputting a bare number, we view it as predicting the parameters
+of a conditional probability distribution $p_{\text{model}}(y \mid x; \theta)$ over the
+target $y$ given the input $x$.
+
+Under the Maximum Likelihood principle, we seek the parameters $\theta$ that assign the
+highest probability to the observed training targets. Maximizing the product of probabilities
+across $N$ independent examples is equivalent to minimizing the average \textbf{Negative
+Log-Likelihood (NLL)} (which is also the \textbf{cross-entropy} between the empirical data
+distribution and the model distribution):
+\begin{equation}
+    J(\theta) = -\frac{1}{N} \sum_{i=1}^N \log p_{\text{model}}(y_i \mid x_i; \theta)
+\end{equation}
+Every standard loss function for regression and classification follows automatically once
+we choose the distribution family for $p_{\text{model}}(y \mid x; \theta)$.
+
+\paragraph{Regression loss functions}
+\begin{itemize}
+    \item \textbf{Mean Squared Error (MSE)}: Derived from Maximum Likelihood by assuming
+          the target is the network's output plus Gaussian noise, $p_{\text{model}}(y \mid x) = \mathcal{N}(y; \hat{y}(x), \sigma^2)$:
+          \begin{equation}
+              \mathcal{L} = \frac{1}{N} \sum_{i=1}^N (y_i - \hat{y}_i)^2
+          \end{equation}
+          Because the error is squared, doubling the mistake quadruples the penalty. As a
+          consequence, large outliers dominate the gradient, and the optimal predictor that
+          minimizes MSE learns the \textbf{conditional mean} $\hat{y}^*(x) = \mathbb{E}[y \mid x]$.
+    \item \textbf{Mean Absolute Error (MAE)}: Derived from Maximum Likelihood by assuming
+          a heavy-tailed \textbf{Laplace} distribution around $\hat{y}(x)$:
+          \begin{equation}
+              \mathcal{L} = \frac{1}{N} \sum_{i=1}^N |y_i - \hat{y}_i|
+          \end{equation}
+          The gradient with respect to $\hat{y}_i$ is $\pm 1$ regardless of how far the
+          prediction is from the target. Because large errors are not amplified, MAE is
+          highly robust to outliers, and the optimal predictor learns the \textbf{conditional
+          median} $\hat{y}^*(x) = \text{median}(y \mid x)$ (though its derivative is
+          discontinuous at $y_i = \hat{y}_i$).
+    \item \textbf{Huber Loss}: Combines the best properties of MSE and MAE to handle
+          outliers smoothly:
+          \begin{equation}
+              \mathcal{L} = \frac{1}{N} \sum_{i=1}^N \begin{cases}
+                  \frac{1}{2}(y_i - \hat{y}_i)^2                  & \text{if } |y_i - \hat{y}_i| \leq \delta \\
+                  \delta |y_i - \hat{y}_i| - \frac{1}{2} \delta^2 & \text{otherwise}
+              \end{cases}
+          \end{equation}
+          It behaves quadratically for small errors ($|y_i - \hat{y}_i| \leq \delta$),
+          providing a smooth gradient near zero, and linearly for large errors, preventing
+          outliers from hijacking the training.
+\end{itemize}
+
+\paragraph{Classification loss functions}
+\begin{itemize}
+    \item \textbf{Binary Cross-Entropy (Log-Loss)}: Derived by assuming a \textbf{Bernoulli}
+          distribution $y_i \in \{0, 1\}$ with predicted probability $\hat{y}_i = P(y_i = 1 \mid x_i)$:
+          \begin{equation}
+              \mathcal{L} = - \frac{1}{N} \sum_{i=1}^N \Big( y_i \log(\hat{y}_i) + (1-y_i) \log(1-\hat{y}_i) \Big)
+          \end{equation}
+          If the model is confident and right ($\hat{y}_i \to y_i$), the loss approaches $0$;
+          if the model is confident and wrong ($\hat{y}_i \to 1 - y_i$), the loss blows up
+          to $\infty$, heavily penalizing overconfident mistakes.
+    \item \textbf{Categorical Cross-Entropy}: Derived by assuming a \textbf{Categorical}
+          (multinoulli) distribution over $k$ mutually exclusive classes. If $y_{i,c} \in \{0,1\}$
+          is the one-hot indicator for the true class of example $i$:
+          \begin{equation}
+              \mathcal{L} = - \frac{1}{N} \sum_{i=1}^N \sum_{c=1}^k y_{i,c} \log(\hat{y}_{i,c}) = - \frac{1}{N} \sum_{i=1}^N \log(\hat{y}_{i, y_i})
+          \end{equation}
+          Because only the true class $y_i$ has a non-zero indicator, the loss on each
+          example depends solely on the probability $\hat{y}_{i, y_i}$ assigned to the
+          correct class.
+    \item \textbf{Hinge Loss}: A margin-based alternative for binary classification where
+          labels are encoded as $y_i \in \{-1, +1\}$ and $z_i$ is the raw linear score:
+          \begin{equation}
+              \mathcal{L} = \frac{1}{N} \sum_{i=1}^N \max(0, 1 - y_i z_i)
+          \end{equation}
+          Here $y_i z_i$ is the \textbf{margin} (positive when the prediction has the
+          correct sign). Unlike cross-entropy—which never reaches zero and always pushes
+          logits to grow larger—hinge loss is strictly $0$ whenever $y_i z_i \geq 1$. Once
+          an example is classified correctly beyond the safety margin, it stops contributing
+          to the gradient.
+\end{itemize}
+\begin{note}
+    Any custom loss function can be used in deep learning as long as it is differentiable
+    almost everywhere, ensuring compatibility with gradient-based optimization.
+\end{note}
+
+\subsection{Output Units}
+The choice of the loss function is tightly coupled with the choice of the \textbf{output
+unit} in the final layer. The hidden layers extract a feature vector $h$, and the output
+unit transforms the final linear logits $z = W^T h + b$ into the parameters of the chosen
+conditional distribution $p_{\text{model}}(y \mid x)$.
+
+\subsubsection{Linear output unit}
+A \textbf{linear output unit} outputs the raw affine transformation directly:
+\begin{equation}
+    \hat{y} = W^T h + b
+\end{equation}
+Linear units are used for regression tasks where $\hat{y} \in \mathbb{R}$ represents the
+mean of a conditional Gaussian distribution $p_{\text{model}}(y \mid x) = \mathcal{N}(y; \hat{y}, \sigma^2)$,
+which under Maximum Likelihood reduces to minimizing the Mean Squared Error.
+
+The crucial advantage of a linear output unit is that its slope is constantly $1$: it
+\textbf{never saturates}, so the gradient $\hat{y} - y$ flows back into the network
+without shrinking even when the prediction is very far from the target.
+
+If we also want the network to predict its own input-dependent uncertainty (heteroscedastic
+regression), the output layer can emit two values: the predicted mean $\hat{y}(x)$ and a
+second raw value $v(x)$ passed through a \textbf{softplus} function $s^2(x) = \log(1 + e^{v(x)})$
+to guarantee that the predicted variance $s^2(x)$ is always strictly positive.
+
+\subsubsection{Sigmoid output unit}
+The \textbf{sigmoid output unit} is used for binary classification ($y \in \{0, 1\}$) to
+model a Bernoulli distribution. Given a single scalar logit $z = w^T h + b$, it squashes
+$z$ into the valid probability interval $(0, 1)$:
+\begin{equation}
+    \hat{y} = \sigma(z) = \frac{1}{1+e^{-z}}
+\end{equation}
+Notice that $\log \frac{\hat{y}}{1 - \hat{y}} = z$, meaning the logit $z$ is the
+\textbf{log-odds} of the positive class: $\hat{y} = 0.5$ when $z = 0$, $\hat{y} > 0.5$
+when $z > 0$, and $\hat{y} < 0.5$ when $z < 0$.
+
+\begin{note}
+    \textbf{Why we always pair a Sigmoid output with Cross-Entropy and NOT Mean Squared Error.}
+    Suppose the true label is $y = 1$, but the model is confidently wrong with $z = -5$
+    ($\hat{y} \approx 0.007$). Here the sigmoid is deep in its flat saturation region where
+    $\sigma'(z) = \hat{y}(1 - \hat{y}) \approx 0.007$.
+    \begin{itemize}
+        \item If we use \textbf{Squared Error} $\mathcal{L} = (\hat{y} - y)^2$, the chain
+              rule multiplies the error by $\sigma'(z)$, giving a tiny gradient: the network
+              barely learns precisely when it is most wrong.
+        \item If we use \textbf{Binary Cross-Entropy} $\mathcal{L} = -y\log\hat{y} - (1-y)\log(1-\hat{y}) = \log(1 + e^{(1-2y)z})$,
+              the logarithm undoes the exponential in the sigmoid. The gradient with respect
+              to the logit simplifies to:
+              \begin{equation*}
+                  \frac{\partial \mathcal{L}}{\partial z} = \hat{y} - y
+              \end{equation*}
+              When $y = 1$ and $\hat{y} \approx 0$, the gradient is $-1$—strong and linear,
+              never saturating when the model is wrong, and flattening out only when
+              $\hat{y} \to y$ (when the model is already right).
+    \end{itemize}
+\end{note}
+
+When a task requires \textbf{multi-label classification} (where an input can belong to
+several of $k$ non-exclusive categories simultaneously, such as tagging an image with
+both ``outdoor'' and ``dog''), we use $k$ independent sigmoid output units trained with
+the sum of $k$ binary cross-entropies.
+
+\subsubsection{Softmax output unit}
+The \textbf{softmax output unit} generalizes the sigmoid to multi-class classification
+over $k$ mutually exclusive classes, modeling a Categorical distribution. A linear layer
+produces $k$ unnormalized logits $z \in \mathbb{R}^k$, and the softmax exponentiates and
+normalizes them so they are strictly positive and sum to $1$:
+\begin{equation}
+    \hat{y}_i = \text{softmax}(z)_i = \frac{e^{z_i}}{\sum_{j=1}^k e^{z_j}}
+\end{equation}
+
+When paired with categorical cross-entropy, the negative log-likelihood for an example
+with true class $y$ becomes:
+\begin{equation}
+    \mathcal{L}(z, y) = -\log \text{softmax}(z)_y = -z_y + \log \sum_{j=1}^k e^{z_j}
+\end{equation}
+This decomposition reveals the exact learning dynamics: the first term $-z_y$ pushes the
+correct class logit $z_y$ \textbf{up}, while the second term $\log \sum_j e^{z_j} \approx \max_j z_j$
+pushes all logits \textbf{down} in proportion to their predicted probability $\hat{y}_j$
+(pushing hardest on the strongest competitor). Just like in the binary case, the $\log$
+cancels the $\exp$ and produces the clean gradient vector $\nabla_z \mathcal{L} = \text{softmax}(z) - e_y$,
+which never vanishes when the prediction is wrong.
+
+\paragraph{Numerical Stability and Shift Invariance}
+Adding the same constant $c$ to every logit leaves the softmax probabilities completely
+unchanged:
+\begin{equation*}
+    \text{softmax}(z + c)_i = \frac{e^{z_i + c}}{\sum_j e^{z_j + c}} = \frac{e^c e^{z_i}}{e^c \sum_j e^{z_j}} = \text{softmax}(z)_i
+\end{equation*}
+On a computer, evaluating $e^{z_i}$ directly causes numerical \textbf{overflow} ($\infty$)
+if $z_i$ is large and positive (e.g., $z_i = 1000$), or \textbf{underflow} ($0/0$) if all
+$z_i$ are large and negative. In practice, we always stabilize softmax by subtracting
+$c = \max_j z_j$ from every logit before exponentiating:
+\begin{equation}
+    \text{softmax}(z) = \text{softmax}\big(z - \max_j z_j\big)
+\end{equation}
+This guarantees that the largest exponent is $e^0 = 1$ and all other exponents lie safely
+in $[0, 1]$, preventing both overflow and division by zero.
+
+\subsubsection{Gaussian Mixtures output unit}
+In some regression problems—especially inverse problems such as predicting the joint
+angles of a robot arm needed to reach a target hand position—a single input $x$ can admit
+\textbf{multiple distinct valid answers} $y$. In such \textbf{multimodal} settings,
+training a single linear output with MSE is disastrous: MSE forces the network to predict
+the conditional mean $\mathbb{E}[y \mid x]$, which averages the valid branches and lands
+in the middle between them—a prediction that is always wrong.
+
+To capture multiple peaks for the same input $x$, a \textbf{Mixture Density Network (MDN)}
+uses a \textbf{Gaussian Mixture Model} (GMM) as its output distribution:
+\begin{equation}
+    p(y \mid x) = \sum_{i=1}^K \pi_i(x) \, \mathcal{N}\big(y; \mu^{(i)}(x), \Sigma^{(i)}(x)\big)
+\end{equation}
+Trained by minimizing the negative log-likelihood $-\log p(y \mid x)$, the network emits
+three groups of outputs from its final layer, each using an output transformation that
+enforces its mathematical constraint:
+\begin{itemize}
+    \item \textbf{Mixture weights} $\pi_i(x) = p(c=i \mid x)$: Represent the prior
+          probability of selecting the $i$-th Gaussian branch. Because they must be
+          positive and sum to $1$, they are parameterized via a \textbf{softmax} layer.
+    \item \textbf{Component means} $\mu^{(i)}(x)$: Represent the center of the $i$-th
+          branch. Since means are unconstrained real numbers, they use \textbf{linear}
+          output units.
+    \item \textbf{Component variances/covariances} $\Sigma^{(i)}(x)$: Measure the spread
+          around each branch. Because variances must be strictly positive, the network
+          passes raw outputs through a \textbf{softplus} ($\log(1+e^v)$) or exponential
+          ($e^v$) function.
+\end{itemize}
+
+\section{Hidden Units and Initialization}
+Every hidden unit computes an affine pre-activation $z = Wx + b$ followed by a non-linear
+\textbf{activation function} $h = g(z)$. Because $g(z)$ sits inside every hidden layer, a
+good hidden activation must satisfy three practical requirements:
+\begin{enumerate}
+    \item It must be \textbf{non-linear}, so that stacking layers adds expressive power.
+    \item Its derivative $g'(z)$ must remain \textbf{sufficiently large} in the region where
+          $z$ typically lands, so gradients can flow backward through many layers.
+    \item It must be \textbf{cheap to evaluate}, since both $g(z)$ and $g'(z)$ are computed
+          millions of times during training.
+\end{enumerate}
+
+\paragraph{The Vanishing Gradient Problem}
+Why are classical sigmoids ($\sigma(z)$) poor hidden activations in deep networks? Consider
+a simple chain of $L = 10$ hidden layers. By the chain rule of backpropagation, the
+gradient of the loss with respect to the first layer's weight $w_1$ contains the product
+of the activation slopes of all $L$ layers:
+\begin{equation*}
+    \frac{\partial \mathcal{L}}{\partial w_1} \propto \prod_{l=1}^{L} g'(z_l)
+\end{equation*}
+For the logistic sigmoid, the slope $\sigma'(z) = \sigma(z)(1-\sigma(z))$ reaches its
+maximum value of only $\frac{1}{4} = 0.25$ at $z = 0$, and drops below $0.05$ for $|z| > 3$.
+Even in the best possible case where all weights are $1$ and all pre-activations sit near
+$0$, multiplying ten sigmoid derivatives shrinks the gradient by a factor of at least
+$(1/4)^{10} \approx 10^{-6}$. The output layer receives a normal gradient and learns
+quickly, while the earliest layers receive a signal a million times weaker and barely move.
+This exponential decay of the backward signal is the \textbf{vanishing gradient problem}.
+
+\begin{figure}[!ht]
+    \centering
+    \begin{tikzpicture}[scale=0.82]
+        % 1. Sigmoid
+        \begin{scope}[xshift=0cm]
+            \draw[->, gray] (-2.2,0) -- (2.2,0) node[right, black, font=\scriptsize] {$z$};
+            \draw[->, gray] (0,-1.3) -- (0,1.6);
+            \draw[dashed, gray!60] (-2,1) -- (2,1);
+            \draw[thick, blue!80!black, domain=-2.1:2.1, samples=40] plot (\x, {1/(1+exp(-2*\x))});
+            \node[font=\footnotesize\bfseries] at (0, 1.9) {Sigmoid $\sigma(z)$};
+            \node[font=\scriptsize, gray!80!black] at (0, -1.7) {Range $(0,1)$, $\max \sigma' = 0.25$};
+        \end{scope}
+
+        % 2. Tanh
+        \begin{scope}[xshift=5.2cm]
+            \draw[->, gray] (-2.2,0) -- (2.2,0) node[right, black, font=\scriptsize] {$z$};
+            \draw[->, gray] (0,-1.3) -- (0,1.6);
+            \draw[dashed, gray!60] (-2,1) -- (2,1);
+            \draw[dashed, gray!60] (-2,-1) -- (2,-1);
+            \draw[thick, purple!80!black, domain=-2.1:2.1, samples=40] plot (\x, {tanh(1.5*\x)});
+            \node[font=\footnotesize\bfseries] at (0, 1.9) {Hyperbolic Tangent $\tanh(z)$};
+            \node[font=\scriptsize, gray!80!black] at (0, -1.7) {Zero-centered $(-1,1)$, $\max \tanh' = 1$};
+        \end{scope}
+
+        % 3. ReLU & Leaky ReLU
+        \begin{scope}[xshift=10.4cm]
+            \draw[->, gray] (-2.2,0) -- (2.2,0) node[right, black, font=\scriptsize] {$z$};
+            \draw[->, gray] (0,-1.3) -- (0,1.6);
+            \draw[thick, dashed, orange!90!black] (-2.0,-0.35) -- (0,0);
+            \draw[thick, red!80!black] (-2.0,0) -- (0,0) -- (1.5,1.5);
+            \node[font=\footnotesize\bfseries] at (0, 1.9) {ReLU \& Leaky ReLU};
+            \node[font=\scriptsize, gray!80!black] at (0, -1.7) {Slope $1$ for $z>0$, $0$ (or $\alpha$) for $z<0$};
+        \end{scope}
+
+        % 4. GELU
+        \begin{scope}[xshift=15.6cm]
+            \draw[->, gray] (-2.2,0) -- (2.2,0) node[right, black, font=\scriptsize] {$z$};
+            \draw[->, gray] (0,-1.3) -- (0,1.6);
+            \draw[thick, teal!80!black, domain=-2.1:1.6, samples=50] plot (\x, {\x * (1/(1+exp(-1.702*1.5*\x)))});
+            \node[font=\footnotesize\bfseries] at (0, 1.9) {GELU / SiLU};
+            \node[font=\scriptsize, gray!80!black] at (0, -1.7) {Smooth gate, slight dip for $z<0$};
+        \end{scope}
+    \end{tikzpicture}
+    \caption{Comparison of the main hidden activation functions: classical saturating sigmoids ($\sigma$ and $\tanh$), piecewise linear rectifiers (ReLU and Leaky ReLU), and smooth self-gated units (GELU/SiLU).}
+    \label{fig:activations_comparison}
+\end{figure}
+
+\subsection{Tanh}
+The \textbf{hyperbolic tangent} ($\tanh$) is a rescaled and shifted version of the logistic
+sigmoid:
+\begin{equation}
+    \tanh(z) = 2\sigma(2z) - 1 \in (-1, 1)
+\end{equation}
+When a bounded, sigmoid-shaped activation is needed inside hidden layers (or recurrent
+networks), $\tanh$ is strongly preferred over the logistic sigmoid for two reasons:
+\begin{enumerate}
+    \item \textbf{Four times larger slope near zero}: At $z = 0$, $\tanh'(0) = 1$ compared
+          to $\sigma'(0) = 0.25$, allowing gradients to survive through more layers when
+          pre-activations stay small.
+    \item \textbf{Zero-centered activations}: The logistic sigmoid only outputs positive
+          numbers ($h_j > 0$). Because the gradient with respect to a weight $w_j$ in the
+          next layer is $\frac{\partial \mathcal{L}}{\partial w_j} = \delta \cdot h_j$,
+          all weights feeding into the same neuron are forced to have gradients of the
+          \textbf{exact same sign} (all positive or all negative) at every step, causing
+          gradient descent to zig-zag inefficiently toward the minimum. Because $\tanh(z)$
+          is centered at zero ($\tanh(0) = 0$), its activations take both positive and
+          negative values, avoiding this zig-zagging behavior.
+\end{enumerate}
+\begin{note}
+    While the logistic sigmoid $\sigma(z) \in (0,1)$ is used in the \textbf{output layer}
+    to predict probabilities for binary classification, $\tanh(z) \in (-1,1)$ is preferred
+    whenever a saturating activation is needed in \textbf{hidden layers}. However, $\tanh$
+    still saturates for $|z| > 3$ ($\tanh'(z) = 1 - \tanh^2(z) \to 0$).
+\end{note}
+
+\subsection{Rectified Linear Unit}
+The \textbf{Rectified Linear Unit} (ReLU) is the default activation function for most
+feedforward and convolutional neural networks:
+\begin{equation}
+    g(z) = \max(0, z)
+\end{equation}
+ReLU solved the vanishing gradient problem for deep networks because its derivative is
+\begin{equation*}
+    g'(z) = \begin{cases} 1 & \text{if } z > 0 \\ 0 & \text{if } z < 0 \end{cases}
+\end{equation*}
+Whenever a unit is active ($z > 0$), its slope is constantly $1$: it never saturates for
+positive inputs, allowing gradients to pass backward through dozens of layers without
+shrinking. Moreover, it is extremely fast to compute (a simple threshold at zero) and
+induces \textbf{sparse representations} by turning off units with negative pre-activations.
+Although $g(z)$ is not differentiable at the single point $z = 0$, numerical optimization
+simply uses the left or right derivative (usually setting $g'(0) = 0$) without issue in
+practice.
+
+\paragraph{Dead Units: The Price of a Zero Slope}
+The main drawback of ReLU is the \textbf{dying ReLU (dead unit) problem}. If a unit's
+weights and bias land in a region where $z < 0$ for \textbf{every} example in the training
+set, the unit outputs $0$ on all inputs and its derivative $g'(z)$ is $0$ everywhere. As
+a result, it receives zero gradient on every batch and its weights never update again—the
+neuron is permanently dead. Dead units are typically caused by a poor initialization (e.g.,
+a large negative bias) or a \textbf{learning rate $\eta$ that is too large}, where a single
+large gradient step pushes the weights far into the negative half-space. To prevent dead
+units, we can lower the learning rate, initialize biases to a small positive constant
+(such as $0.1$), or use generalizations of ReLU that keep a non-zero slope for $z < 0$.
+
+Most piecewise-linear generalizations of ReLU can be written in the unified form:
+\begin{equation}
+    h_i = g(z_i, \alpha_i) = \max(0, z_i) + \alpha_i \min(0, z_i)
+\end{equation}
+Depending on how $\alpha_i$ is chosen, we obtain several variants:
+\begin{itemize}
+    \item \textbf{Absolute value rectification}: Fixes $\alpha_i = -1$, giving $g(z) = |z|$.
+          It is occasionally used in early stages of object recognition where features
+          should be invariant to polarity reversals (e.g., dark-on-light vs. light-on-dark edges).
+    \item \textbf{Leaky ReLU}: Fixes $\alpha_i$ to a small positive constant such as
+          $\alpha_i = 0.01$. Giving negative inputs a small non-zero slope ensures that
+          even units with $z < 0$ still receive a gradient and can recover, eliminating dead units.
+    \item \textbf{Parametric ReLU (PReLU)}: Treats $\alpha_i$ as a learnable parameter
+          optimized via backpropagation alongside the weights, allowing each channel or
+          layer to adapt its negative slope to the data.
+    \item \textbf{Maxout units}: Instead of applying a fixed activation function, a Maxout
+          unit divides its inputs into $k$ linear filters and outputs the maximum across them:
+          \begin{equation}
+              g(x) = \max_{j \in \{1, \dots, k\}} \left( w_j^T x + b_j \right)
+          \end{equation}
+          A single Maxout unit learns its own activation function as a convex, $k$-piece
+          linear function (Figure \ref{fig:Maxout}), generalizing ReLU ($k=2$ with one zero
+          filter), Leaky ReLU, and $|z|$. Because the maximum always routes the gradient
+          through whichever piece is active, Maxout never saturates and avoids dead units,
+          at the cost of requiring $k$ times more parameters per unit.
+          \begin{figure}[!ht]
+              \centering
+              \includegraphics[width=0.5\textwidth]{img/maxout.png}
+              \caption{Maxout units}
+              \label{fig:Maxout}
+          \end{figure}
+    \item \textbf{Softplus}: A smooth approximation of ReLU whose derivative is the
+          logistic sigmoid ($\zeta'(z) = \sigma(z)$):
+          \begin{equation}
+              \zeta(z) = \log(1+e^z)
+          \end{equation}
+          Although Softplus was introduced to remove ReLU's kink at $z = 0$, empirical
+          results consistently show that standard ReLU trains faster and generalizes
+          better in hidden layers, while Softplus remains useful primarily at the output
+          layer to enforce positive predictions (such as variances).
+\end{itemize}
+
+\subsection{Modern Activation Functions: GELU, SiLU and SwiGLU}
+Modern architectures—particularly Transformers and large language models—replace the sharp
+kink of ReLU with smooth \textbf{gated} activations:
+\begin{itemize}
+    \item \textbf{GELU (Gaussian Error Linear Unit)}: Used as the standard hidden activation
+          in BERT, GPT, and Vision Transformers (ViT). Notice that ReLU can be viewed as
+          multiplying $z$ by a hard binary gate $\mathbb{I}(z > 0) \in \{0, 1\}$. GELU
+          replaces this hard switch with a \textbf{smooth probabilistic gate} $\Phi(z) = P(Z \leq z)$,
+          the cumulative distribution function of a standard normal variable $Z \sim \mathcal{N}(0, 1)$:
+          \begin{equation}
+              \text{GELU}(z) = z \cdot \Phi(z) \approx z \cdot \sigma(1.702 z)
+          \end{equation}
+          Large positive values pass through almost unchanged ($\Phi(z) \to 1$), large
+          negative values are blocked ($\Phi(z) \to 0$), and small negative values are
+          partially let through, creating a smooth curve with a slight negative dip (down
+          to $-0.17$ near $z \approx -0.75$) that prevents dead units.
+    \item \textbf{SiLU (Sigmoid Linear Unit, or Swish)}: Used in modern convolutional
+          models like EfficientNet. It applies the exact same self-gating principle as
+          GELU, simply using the logistic sigmoid $\sigma(z)$ as the soft gate:
+          \begin{equation}
+              \text{SiLU}(z) = z \cdot \sigma(z)
+          \end{equation}
+    \item \textbf{SwiGLU (Swish-Gated Linear Unit)}: Used in the feedforward blocks of
+          modern large language models such as LLaMA and PaLM. While GELU and SiLU use $z$
+          to gate itself, SwiGLU \textbf{learns a separate gate} from the input $x$ using
+          two parallel linear projections $W_a$ (for the content) and $W_b$ (for the gate):
+          \begin{equation}
+              h = (W_a^T x + b_a) \odot \text{SiLU}(W_b^T x + b_b)
+          \end{equation}
+          where $\odot$ denotes element-wise multiplication. Because a SwiGLU block uses
+          three weight matrices instead of two (two projections in and one projection out),
+          practitioners typically shrink the hidden width to $\frac{2}{3}$ of a standard
+          MLP layer so the total number of parameters and FLOPs stays identical.
+\end{itemize}
+
+\subsection{Weight Initialization: Breaking Symmetry and Preserving Scale}
+Activations decide how the signal flows, but proper initialization of weights and biases
+is equally crucial to ensure stable training and prevent the signal from exploding or
+vanishing across layers.
+
+First, a hidden unit \textbf{saturates} when its pre-activation $|z|$ becomes too large
+and falls into a flat region of the activation function where the slope $g'(z) \approx 0$.
+Because backpropagation multiplies the error signal by $g'(z)$, a saturated unit receives
+virtually zero gradient and stops learning. To avoid immediate saturation at the start of
+training, inputs should be standardized and initial weights kept small.
+
+Second, \textbf{weights must never be initialized to the same value} (such as all zeros).
+If all weights in a layer start at the same value, every unit in that layer computes the
+exact same output, receives the exact same gradient during backpropagation, and undergoes
+the exact same update. The units remain identical \textbf{cloni} forever, making a layer
+of $512$ units behave like a single neuron. To \textbf{break symmetry}, weights are drawn
+randomly, while \textbf{biases} can safely be initialized to $0$ (or to a small positive
+value like $0.1$ for ReLU units to prevent them from starting in the inactive region $z < 0$).
+
+Finally, the scale of the random weights must preserve the variance of activations moving
+forward and gradients moving backward across all $L$ layers. If weights are too large,
+activations explode exponentially with depth; if they are too small, activations shrink
+to zero. This leads to two standard initialization schemes depending on the activation function:
+\begin{itemize}
+    \item \textbf{Glorot (Xavier) Initialization}: Designed for symmetric, zero-centered
+          activations like $\tanh$ (and sigmoid) that are roughly linear with slope $1$
+          around the origin. It compromises between preserving the forward activation
+          scale ($1/n^{[l-1]}$) and the backward gradient scale ($1/n^{[l]}$):
+          \begin{equation*}
+              W^{[l]} \sim \mathcal{N}\left(0, \frac{2}{n^{[l-1]} + n^{[l]}}\right)
+          \end{equation*}
+    \item \textbf{He (Kaiming) Initialization}: Designed for \textbf{ReLU} networks.
+          Because ReLU zeroes out all negative inputs, it silences roughly half of the
+          units at each layer and halves the signal variance. Doubling the variance in
+          the numerator compensates for the lost half of the signal:
+          \begin{equation*}
+              W^{[l]} \sim \mathcal{N}\left(0, \frac{2}{n^{[l-1]}}\right)
+          \end{equation*}
+\end{itemize}
+Effective initialization keeps activations and gradients well-scaled from the very first
+step, enabling fast and reliable convergence.
+
+\subsection{Guidelines for choosing activation functions}
+In practice, the choice of activation function follows clear rules of thumb:
+\begin{itemize}
+    \item \textbf{Hidden layers of MLPs and CNNs}: Start with \textbf{ReLU} paired with
+          \textbf{He initialization}. It is fast, simple, and maintains a constant slope of $1$
+          for active units.
+    \item \textbf{When many units die}: Switch to \textbf{Leaky ReLU} (or PReLU) and
+          reduce the learning rate $\eta$.
+    \item \textbf{Transformer feedforward blocks}: Use \textbf{GELU} or \textbf{SwiGLU},
+          which provide smooth gradients and stronger empirical performance at scale.
+    \item \textbf{Recurrent Neural Networks (RNNs / LSTMs)}: Use \textbf{Sigmoid} for
+          gates (which must lie in $[0,1]$) and \textbf{Tanh} for hidden state updates
+          (which must stay bounded and zero-centered in $[-1,1]$).
+    \item \textbf{Output layer}: Never use ReLU at the output of a classifier; always match
+          the output unit to the target distribution (Linear for regression, Sigmoid for
+          binary classification, Softmax for multi-class classification).
+\end{itemize}
+
+\section{Architecture Design, Universal Approximation and Depth}
+Designing a feedforward network requires choosing both its \textbf{width} (how many units
+per layer) and its \textbf{depth} (how many layers to stack). To understand why modern
+networks favor depth over sheer width, we first look at how a single hidden layer builds
+functions geometrically.
+
+\subsection{How One Hidden Layer Builds Shapes: Cuts, Bumps, and Hats}
+In one dimension ($x \in \mathbb{R}$), a single sigmoid unit $\sigma(w(x - c))$ acts like
+a soft step that turns on at $x = c$. Subtracting two shifted sigmoids,
+$\sigma(w(x - a)) - \sigma(w(x - b))$, creates a step up at $a$ followed by a step down at
+$b$—a localized \textbf{bump}. Similarly, combining three ReLU units with weights
+$(+1, -2, +1)$ builds a triangular \textbf{hat} function (Figure \ref{fig:hats_and_folding},
+left): the first ReLU starts a rising ramp, the second bends it downward at the peak, and
+the third flattens it back to zero. By summing $N$ such bumps or hats placed at different
+locations and scaled by output weights, a single hidden layer can trace any continuous 1D
+curve like a broken-line (piecewise-linear) approximation.
+
+In two or more dimensions ($x \in \mathbb{R}^d$), each hidden unit defines a \textbf{cut}
+across the input space along the hyperplane $w^T x + b = 0$, outputting high values on one
+side and low values on the other. The hidden layer places the cuts, and the output layer
+combines them like soft logical operators:
+\begin{itemize}
+    \item Subtracting two parallel cuts isolates a \textbf{band} (high between the two lines,
+          zero outside).
+    \item Adding two crossing cuts with a high bias threshold acts like a logical AND,
+          carving out a \textbf{curved corner}.
+    \item Subtracting two crossing cuts acts like an AND NOT, isolating a \textbf{wedge} region.
+\end{itemize}
+
+\subsection{The Universal Approximation Theorem}
+This geometric intuition is formalized by the \textbf{Universal Approximation Theorem}
+(Hornik et al., 1989; Cybenko, 1989; Leshno et al., 1993): for any continuous function
+$f^*$ on a closed and bounded subset of $\mathbb{R}^d$ and any target tolerance
+$\varepsilon > 0$, there exists a neural network with \textbf{one hidden layer} of $N$
+units and a linear output layer,
+\begin{equation}
+    f(x) = \sum_{j=1}^N v_j \, g\left(w_j^T x + b_j\right) + c
+\end{equation}
+such that $|f(x) - f^*(x)| < \varepsilon$ for all $x$ in the domain, provided the activation
+function $g$ is continuous and non-polynomial (which holds for sigmoid, $\tanh$, and ReLU).
+
+\begin{note}
+    \textbf{What the Universal Approximation Theorem does NOT say.} While the theorem
+    guarantees that a single hidden layer can represent any continuous function in principle,
+    it has three critical caveats in practice:
+    \begin{enumerate}
+        \item \textbf{Width can be exponential}: In $d$ dimensions, placing local bumps or
+              kinks on a grid to match an arbitrary function requires $N \sim \mathcal{O}(\varepsilon^{-d})$
+              units—an exponential explosion in the input dimension $d$.
+        \item \textbf{No optimization guarantee}: The theorem proves that the right weights
+              \textit{exist}, not that gradient descent will be able to find them.
+        \item \textbf{No generalization guarantee}: A massively wide single layer may
+              simply memorize the training points and generalize poorly to new data.
+    \end{enumerate}
+\end{note}
+
+\subsection{Why Depth Helps: Composition and Space Folding}
+Why do we stack many layers instead of using one huge hidden layer? Because adding units
+to a single layer \textbf{adds} linear pieces (kinks), whereas stacking layers
+\textbf{composes} functions and \textbf{multiplies} the number of linear pieces.
+
+Consider a simple symmetric ``tent'' function $t(x)$ on $[0,1]$ built with $2$ ReLU units,
+which rises from $0$ to $1$ at $x = 0.5$ and falls back to $0$ at $x = 1$ (having $2$
+linear pieces). If we feed the output of this layer into an identical $2$-ReLU layer, the
+composition $t(t(x))$ folds the interval $[0,1]$ in half before applying the tent again,
+creating $2 \times 2 = 4$ linear pieces. Stacking $L$ such layers uses only $2L$ units in
+total, yet produces $2^L$ linear pieces (Figure \ref{fig:hats_and_folding}, right)—a highly
+oscillating function that a single-layer network would need $\sim 2^L$ units to build!
+More generally (Mont\'ufar et al., 2014), the maximum number of linear regions carved out
+by a ReLU network grows \textbf{polynomially with width} but \textbf{exponentially with
+depth $L$}.
+
+\begin{figure}[!ht]
+    \centering
+    \begin{tikzpicture}[scale=1.0]
+        % Left: 3 ReLUs make a hat
+        \begin{scope}[xshift=0cm]
+            \draw[->, thick] (-0.2,0) -- (3.4,0) node[right] {$x$};
+            \draw[->, thick] (0,-0.2) -- (0,1.8) node[above] {$h(x)$};
+            \draw[very thick, blue!80!black] (0,0) -- (0.6,0) -- (1.6,1.3) -- (2.6,0) -- (3.2,0);
+            \draw[dashed, gray] (0.6,0) node[below, black, font=\scriptsize] {$a$} -- (0.6, 0.2);
+            \draw[dashed, gray] (1.6,0) node[below, black, font=\scriptsize] {$b$} -- (1.6, 1.3);
+            \draw[dashed, gray] (2.6,0) node[below, black, font=\scriptsize] {$c$} -- (2.6, 0.2);
+            \node[font=\footnotesize\bfseries] at (1.6, 2.1) {1 Layer: 3 ReLUs Build 1 Hat};
+            \node[font=\scriptsize, gray!80!black] at (1.6, -0.65) {Width \textbf{adds} kinks one by one};
+        \end{scope}
+
+        % Right: Composition multiplies pieces
+        \begin{scope}[xshift=5.6cm]
+            \draw[->, thick] (-0.2,0) -- (4.4,0) node[right] {$x$};
+            \draw[->, thick] (0,-0.2) -- (0,1.8) node[above] {$t^{(L)}(x)$};
+            % L=1 (dashed)
+            \draw[dashed, thick, gray!70] (0,0) -- (2.0,1.4) -- (4.0,0);
+            % L=2 (solid)
+            \draw[very thick, teal!80!black] (0,0) -- (1.0,1.4) -- (2.0,0) -- (3.0,1.4) -- (4.0,0);
+            \node[font=\footnotesize\bfseries] at (2.1, 2.1) {Depth $L$: Composition Folds Space};
+            \node[font=\scriptsize, gray!80!black] at (2.1, -0.65) {Depth \textbf{multiplies} pieces ($2 \to 4 \to 2^L$ with $2L$ units)};
+        \end{scope}
+    \end{tikzpicture}
+    \caption{Left: Three ReLU units in a single layer combine to form a localized ``hat'' function. Right: Composing a 2-ReLU ``tent'' function across $L$ layers folds the input space repeatedly, doubling the number of linear segments at each layer.}
+    \label{fig:hats_and_folding}
+\end{figure}
+
+Geometrically, each layer with folded activations (like a tent or $|z|$) acts like folding
+a sheet of paper along a hyperplane: any pattern learned by the subsequent layers is
+automatically replicated across both halves of the fold ($2^L$ copies across $L$ layers).
+Choosing a deep architecture therefore encodes a powerful structural prior: that the target
+function is a \textbf{hierarchical composition of simpler steps}, which allows deep networks
+to generalize significantly better on real-world tasks than shallow networks with the same
+number of parameters.
+
+\subsection{Beyond the Dense Chain: Connectivity and Skip Connections}
+A standard MLP connects every unit in layer $l-1$ to every unit in layer $l$, making no
+assumptions about input structure. When data has known symmetries, we specialize the
+connectivity: \textbf{Convolutional Neural Networks (CNNs)} use local connections and share
+weights across space for images, while \textbf{Recurrent Neural Networks (RNNs)} share
+weights across time steps for sequences.
+
+Finally, when networks become very deep ($30$ to $100+$ layers), even with ReLU and He
+initialization, training can degrade. Modern deep architectures solve this by adding
+\textbf{skip (residual) connections}:
+\begin{equation}
+    h^{(l+1)} = h^{(l)} + F(h^{(l)})
+\end{equation}
+Instead of forcing layer $l$ to re-learn the entire representation from scratch, the layer
+only learns an additive correction $F(h^{(l)})$ to its input. During backpropagation, the
+identity path $+ h^{(l)}$ provides a direct highway that allows gradients to flow backward
+across many layers unimpeded.
+
+\section{Regularization}
+\textbf{Regularization} is a crucial technique in deep learning to prevent
+\textit{overfitting}, which occurs when a model performs well on training data
+but poorly on unseen data. Regularization strategies aim to reduce the model's
+variance at the cost of slightly increasing its bias. This trade-off results in
+a model that generalizes better to new data. Below we will list some of the
+regularization techniques that we will go to see:
+\begin{itemize}
+    \item Parameters norm penalties;
+    \item Dataset augmentation;
+    \item Noise robustness;
+    \item Early stopping;
+    \item Parameter tying and parameter sharing;
+    \item Multitask learning;
+    \item Bagging and other ensemble methods;
+    \item Dropout;
+    \item Adversarial training;
+\end{itemize}
+
+We need to have a model that is capable to generalize on unseen data, so we have
+to find the right trade-off in order to avoid overfitting and underfitting.
+
+In the context of deep learning, most regularization strategies are based on
+\textbf{regularizing estimators}. This is done through reducing \textbf{variance}
+at the expense of increasing the \textbf{bias} of the estimator.
+\begin{note}
+    A good estimator is one that decreases the variance without increasing too
+    much the bias.
+\end{note}
+
+When we are working with deep learning to solve complex tasks, we can encounter
+different problems. This can increase the complexity of the model and the risk of
+overfitting. In this case, we can find the best large model and in the end apply
+a regularization process to reduce the complexity of the model and improve the
+generalization.
+
+The concept of regularization in machine learning and deep learning is to create
+models that not only minimize the loss function but also manage the variability
+and generalization capability of the model. To accomplish this, we can employ the
+following strategies:
+\begin{itemize}
+    \item \textbf{Directly}: incorporates prior knowledge or expresses a generic
+          preference for simpler models by directly altering the model or its
+          training process. This is implemented by changing constraints, adding
+          restrictions on the parameter values or changing objective function.
+          The constraints serve to penalize certain values of the parameters;
+    \item \textbf{Undirectly}: this method does not manipulate the model directly
+          but alters the training process or data to enhance generalization. This
+          can be done using technique such as data augmentation, introducing noise
+          in the training data or using ensemble methods.
+\end{itemize}
+\subsection{Regularization strategies}
+\subsubsection{Parameters Norm Penalties}
+The most traditional form of regularization consists in adding a penalty term to
+the loss function, encouraging smaller or sparser parameter values. It can be
+formulated as:
+\begin{equation}
+    \hat{J}(\theta) = J(\theta) + \alpha \Omega(\theta)
+\end{equation}
+where $\alpha \in [0, \infty)$ is a hyperparameter that regulates the contribution
+of the norm penalties, and $\Omega(\theta)$ is the penalty term. This parameter
+can change for each layer.
+
+Since we have added a penalty term, the optimizer will try to minimize the loss
+function and at the same time it decreases some measure of the size of the
+parameters $\theta$. It affects only a subset of parameters.
+
+$\Omega$ usually penalizes only the weights ($W$) of the affine transformation
+at each layer, not the bias ($b$).
+
+This method can be implemented using different norms, here we can see some of them:
+\begin{itemize}
+    \item \textbf{Sum of the weights} or \textbf{$L_1$ Norm} ($L_1$): Promotes
+          sparsity pushing all values to $0$ penalizing small weights more than big one.
+          \begin{equation}
+              \Omega(w) = \sum_{w_j}|w_j| = \|w\|_1
+          \end{equation}
+    \item \textbf{Sum of the squared weights} or \textbf{$L_2$ Norm} ($L_2$):
+          penalizes larger weights, encouraging smoothness:
+          \begin{equation}
+              \Omega(w) = \sum_{w_j}|w_j|^2 = \|w\|_2
+          \end{equation}
+    \item \textbf{$p$-norm} ($L_p$): for $p < 2$ encourage sparser vector, while
+          larger values of $p$ discourage large weights more:
+          \begin{equation}
+              \Omega(w) = \sqrt[p]{\sum_{w_j}|w_j|^p} = \|w\|_p
+          \end{equation}
+          In general, all the $p-$norms are used to penalize large weights more
+          than small ones.
+\end{itemize}
+
+The effect of the $L_2$ norm is to shrinks weights on features that add noise to
+the model (feature with high variance but low covariance with target), while
+$L_1$ norm provides a solution that is sparse. This property can be seen as a
+features selection mechanism.
+\begin{note}
+    Using $L_2$ negative and positive weights moves towards 0 depending on the
+    magnitude of the weights, while using $L_1$ negative and positive weights
+    moves towards 0 regardless of magnitude.
+\end{note}
+
+Another improve that we can add to the previous model are constraints related to
+regularization term, for example, if we consider the following loss function:
+\begin{equation}
+    \hat{J}(\theta) = J(\theta) + \alpha \Omega(\theta)
+\end{equation}
+we can add a constraint to the regularization term as follows:
+\begin{equation}
+    \Omega(\theta) \le k
+\end{equation}
+where $k$ is a small value. In this way the optimization problem changed because
+we have to consider also the upper-bound of regularization term.
+
+To solve this problem, we can construct a generalize \textbf{Lagrange function},
+consisting of the original objective function plus a set of penalties. Each
+penalty is a product between a coefficient, called a Lagrange multiplier ($\alpha$),
+and a function representing whether the constraint is satisfied.
+\begin{equation}
+    \mathcal{L}(\theta, \alpha; X,y) = J(w;X,y)+ \alpha(\Omega(\theta)-k)
+\end{equation}
+Formally the optimization problem will be:
+\begin{equation}
+    \argmin_\theta \max_{\alpha \geq 0} \mathcal{L}(\theta, \alpha)
+\end{equation}
+
+To solve this problem we can use techniques that minimize $J$ and then project
+the solution obtained to the feasible region $\Omega(\theta) - k$. This method
+prevent to get stuck in local minimum and impose stability on the optimization
+procedure.
+\subsubsection{Dataset augmentation}
+We can get better generalization training model on more data. The main problem is
+that data is limited also labelling is an extremely tedious task. \textbf{Dataset
+    augmentation} provides a cheap easy way to increase the amount of your
+training data.
+
+Moreover, when you are comparing different algorithms you have to compare on
+augmented and non augmented dataset to avoid bias.
+
+To implement this technique, there are many algorithms available, but when we
+use them, it's important to be cautious about introducing bias or altering the
+output in the dataset.
+\subsubsection{Noise robustness}
+\textbf{Noise injection} can be thought of as a form of regularization. When we
+add a noise with infinitesimal variance at input of the model is equivalent to
+imposing a penalty on the norm of the weights.
+
+Noise can be injected at different levels of deep models, if we add on input we
+are defining a data augmentation procedure, so we have to use some of the best
+practices explained before.
+
+Adding small noise pushes model into regions where the model is insensitive to
+small variations in weights, finding points that are not merely minima, but
+minima surrounded by flat regions.
+
+Since some dataset present mistake on the labels, we can remedy this problem by
+adding noise to the labels. This can be done through setting a probability $\varepsilon$
+for which we think the labels are correct.
+
+This method implemented analytically in the \textbf{cross entropy} function.
+Another example of this technique is \textbf{label smoothing}, where we use
+softmax activation function in the output layer to get a probability.
+\begin{equation*}
+    \left[\begin{array}{c}
+            1 \\0\\\vdots\\ 0
+        \end{array}\right]_{label} \implies \left[\begin{array}{c}
+            0.9 \\0.01\\\vdots\\ 0.02
+        \end{array}\right]_{label}
+\end{equation*}
+
+Using a softmax we will never predict 0 or 1 but it will predict a probability so
+model can always learn and make more extreme prediction forever. This has the
+advantage of preventing the pursuit of hard probabilities without discouraging
+correct classification.
+\subsubsection{Multitasking learning}
+\textbf{Multitasking learning} is a way to improve generalization by pooling the
+examples arising out of several tasks. It is usually performed through the
+following architecture:
+\begin{itemize}
+    \item \textit{Task-specific parameters}: which only benefit from the examples
+          of their task to achieve good generalization.
+    \item \textit{Generic parameters}: parameters shared across all tasks which
+          benefit from the pooled data of all tasks.
+\end{itemize}
+\begin{figure}[!ht]
+    \centering
+    \includegraphics[width=0.5\textwidth]{img/multitask.png}
+    \caption{Multitasking learning}
+    \label{fig:multitask}
+\end{figure}
+\begin{note}
+    Multitasking learning is a form of parameter sharing.
+\end{note}
+
+Shared parameters improve generalization in proportion of number of examples for
+the general task. Additional task imposes constraints on the parameters in the
+shared layers preventing overfitting.
+\begin{note}
+    Improvement in generalization only occurs when there is something shared across
+    the tasks at hand.
+\end{note}
+\subsubsection{Early stopping}
+When training large models with sufficient representational capacity to overfit
+the task, we often observe that training error decreases over time but validation
+error begins to rise again. We can obtain a model with better validation error by
+returning to the parameter setting at the point in time with the lowest validation
+error.
+
+\textbf{Early stopping} is one of the most common techniques used. We can think
+at this technique as a hyperparameter selection method, where training time is
+the hyperparameter to be chosen.
+
+Early stopping can be implemented as follow:
+\begin{enumerate}
+    \item Choose number of iterations $n$
+    \item Train model for $n$ iterations
+    \item Validate model and compute validation error, compare consecutive validation
+          error and return to point 2 until delta is insignificant or negative.
+\end{enumerate}
+Every iteration model improves its weights until it starts to going in overfitting.
+\begin{note}
+    It's impossible to write all parameters on disk during training.
+\end{note}
+\begin{figure}[!ht]
+    \centering
+    \includegraphics[width=0.5\textwidth]{img/early_stopping.png}
+    \caption{On the left we can see the process of early stopping, while on the
+        right we can see a classic regularization process.}
+    \label{fig:earlystopping}
+\end{figure}
+\subsubsection{Parameters Tying}
+\textbf{Parameters Tying} refers to explicitly forcing the parameters of 2 models
+to be close to each other using the norm penalty:
+\begin{equation}
+    \|w(A)- w(b)\|
+\end{equation}
+with $A$ and $B$ respectively first and second model. This norm penalty is added
+to the objective function like a constraint. It is used in Siamese networks,
+convolution operators and multitasking learning.
+\subsubsection{Bagging}
+\textbf{Bagging} is a technique for reducing generalization error combining
+several models (\textbf{ensemble model}).
+
+You have to train $k$ different models on $k$ different subsets of training data
+with same number of examples as original dataset using a random sampling with
+replacement.
+
+Every model is then tested, they produce $k$ votes for the final result. These
+models are called ensemble.
+
+The objective of this method is to introduce generalization by using different
+models trained on different examples using different initialization hyperparameter
+and different structures to have independent errors.
+
+Cons of this method is that ensemble models doesn't provide us a scalable way to
+improve performance, moreover we have 2-3 models inside the ensemble.
+\subsubsection{Dropout}
+\textbf{Dropout} provides a computationally inexpensive but powerful method of
+regularizing a broad family of models. It provides an inexpensive approximation
+of a ensemble with a high number of sub-networks of the starting one.
+
+All the sub-networks should be formed by removing non-output units from underlying
+base network, generating an exponential number of models, using a treatable
+amount of memory.
+
+This technique eliminates the need to accumulate model votes in the inference
+phase. It is intended to train the model to be learned by switching on and off
+with different probabilities input neurons or neurons in the hidden layers.
+
+To do a train phase we use a \textbf{minibatch-based learning algorithm} that
+makes small steps, such as stochastic gradient descent.
+
+Each time we change minibatch we \textbf{randomly sample} a different binary mask
+to apply to all input and hidden units in the network. Typically the distribution
+use for sampling is not uniform. For example, the probability of keeping a hidden
+unit is $0.5$, while the probability of including an input unit is $0.8$.
+
+We can have some problem, indeed, at training time we are required to divide the
+output of each unit by the probability of that unit's dropout mask, so we assign
+as likelihood on the output. In this way we make sure that the expected total
+input to a unit at test time is the same as the expected total input of that unit
+at train time.
+
+We haven't theoretically basis for the accuracy but empirically it perform well.
+Complexity of dropout is limited to a $\mathcal{O}(n)$ computation per example
+to update because it needs to generate a total of $n$ random numbers and multiply
+them by the state.
+
+Dropout can be used with every model and also with stochastic gradient descent.
+The cost of applying dropout to the entire model could be significant, but the
+amount of benefit on generalization error couldn't be enough to the cost of the
+regularization.
+\subsubsection{Adversarial training}
+We can add \textbf{adversarial examples} (inputs perturbed by noise) to train the
+model for robustness. These are used to train the network and will allowed us to
+reduce test errors.
+
+Adversarial examples can be generated by adding to a bit of perturbation on some
+train example with a low multiplication factor of noise. This method allowed us
+to generate new examples for training from the original train set with slightly
+changes that are unrecognized by humans.
+\section{Generative Adversarial Models}
+\textbf{Generative Adversarial Network} (GAN) are generative model that
+implicitly learn the \textbf{data distribution} from a zero-sum game between 2
+computing neural network:
+\begin{itemize}
+    \item \textbf{Discriminator}: a neural network that classify examples between
+          fake and real.
+    \item \textbf{Generator}: generate fake example that are given as input to the
+          discriminator.
+\end{itemize}
+
+\begin{figure}[!ht]
+    \centering
+    \includegraphics[width=0.5\textwidth]{img/GAN.png}
+    \caption{Generative Adversarial Network}
+    \label{fig:gan}
+\end{figure}
+
+The target of the generator is to generate example the most similar to real one
+in such a way to be classified in real example by the discriminator. Quite the
+opposite the discriminator have to identify real examples from fake one. If the
+discriminator makes a mistake so we will update discriminator's weights, vice
+versa we will update generator's weights.
+\section{Optimization for training deep models}
+When we are creating a deep learning model, we have to consider different aspects
+to optimize the training process. In this section, we are going to see some
+issues that can arise during the training process and how to solve them.
+
+Let's start by introducing the difference between \textbf{optimization} and
+\textbf{machine learning}. In the first case, we are trying to minimize a function
+acting directly on it, while in the second case we are trying to minimize a loss
+function that is a proxy for the true function we want to minimize.
+
+In machine learning, we aim to optimize a performance measure $P$, based on the
+test set. This is done by optimizing a different function $J(\theta)$, with the
+hope that improvements in $J(\theta)$ lead to improvements in $P$.
+
+Typically, the loss function is a simple average over the training set and can be
+written as:
+\begin{equation}
+    J(\theta) = E_{(x, y) \approx \hat{P}_{data}} \mathcal{L}(f(x, \theta), y)
+\end{equation}
+where $\mathcal{L}$ is the loss function, $f$ is the model, $x$ is the input, $y$
+is the target and $\theta$ are the parameters of the model. Also, $\hat{P}_{data}$ is
+the empirical distribution of the data.
+
+If we know the true data distribution $P_{data}$, the loss function, also called
+the \textbf{risk function}, can be expressed as:
+\begin{equation}
+    J(\theta) = E_{(x, y) \approx P_{data}} \mathcal{L}(f(x, \theta), y)
+\end{equation}
+and this reduce the machine learning problem to an optimization problem.
+
+The problem of using the empirical distribution is that the model is prone to
+overfitting, because we don't have enough data to represent the real distribution.
+
+Instead of minimizing the empirical risk, we can minimize a \textbf{surrogate
+    loss function}. This function is a proxy for the true loss function and it
+is easier to optimize.
+
+Another difference is that training algorithms doesn't halt at local minima, but
+when the early stopping criterion is met. This can be roughly thought of as a
+way to reincorporate the true loss function in the learning process.
+\subsection{Batch and Minibatch}
+One aspect of machine learning algorithms that separates them from general
+optimization algorithms is that the objective function usually decomposes as a
+sum over the training examples. Computing this expectation exactly is very
+expensive, since it requires evaluating the model on every example in the entire
+dataset.
+
+However, we can compute these expectations by randomly sampling a small number
+of examples from the dataset at every iteration. This works because we are
+computing an expected value and, the \textbf{standard error} of the mean estimated
+from a sample of size $m$ is:
+\begin{equation}
+    SE(\mu) = \sqrt{VAR\left[\frac{1}{m}\sum x^{(i)}\right]} = \frac{\sigma}{\sqrt{m}}
+\end{equation}
+where $\sigma$ is the standard deviation of the distribution. This equation shows
+that the relationship is sub-linear between the number of examples and the standard error.
+
+Another consideration that motivates the estimation of the gradient from a
+small number of samples is the redundancy in the training set.
+
+Optimization algorithms that use the entire training set to compute the gradient
+are called \textbf{batch} or \textbf{deterministic gradient methods}. While the
+ones that use a single training example for that task are called \textbf{stochastic
+    gradient methods}. Most of the algorithms we use for deep learning fall
+somewhere in between and they are called \textbf{mini-batch} or \textbf{mini-batch
+    stochastic methods}. We can see the difference between these methods in the
+following figure \ref{fig:batchminibatch}.
+
+\begin{figure}[!ht]
+    \centering
+    \includegraphics[width=0.5\textwidth]{img/minibatchvsbatch.png}
+    \caption{Difference between batch, mini-batch and stochastic gradient methods.}
+    \label{fig:batchminibatch}
+\end{figure}
+
+In order to chose the right size of the mini-batch, we have to consider that a
+larger size will provide a more accurate estimate of the gradient, but with less
+than linear improvement in the standard error. While a smaller size will provide
+a less accurate estimate of the gradient, but with more than linear improvement
+in the standard error and doesn't use the full computational power of the GPU.
+
+\begin{note}
+    Usually, a good choice is a power of 2.
+\end{note}
+
+It is extremely crucial that mini-batches are sampled at \textbf{random}, because
+computing an unbiased estimate of the expected gradient from a set of samples
+requires that those samples be independent.
+
+When the order of elements in the dataset holds some significance, it is absolute
+necessity to shuffle the examples before selecting every mini-batch.
+\subsection{Challenges in deep learning}
+Traditionally, machine learning has avoided this difficulty by carefully designing
+the objective function and constraints to insure the problem is convex. However,
+for training deep models we usually face non-convex optimization.
+\subsubsection{Ill-conditioning}
+The first challenge is \textbf{ill-conditioning}. This is a problem that arises
+when the optimization problem is poorly conditioned. This means that the curvature
+of the loss function is very different in different directions.
+
+This condition manifests in stochastic gradient descent when small steps increase
+the loss function.
+
+This problem can be identify by looking at the \textbf{condition number} of the
+Hessian matrix. If the condition number is very large, we have an ill-conditioned
+problem.
+\begin{figure}[!ht]
+    \centering
+    \includegraphics[width=0.5\textwidth]{img/illConditioned.png}
+    \caption{Ill-conditioning}
+    \label{fig:illconditioning}
+\end{figure}
+
+\subsubsection{Local minima}
+Functions involved in deep models are guaranteed to have an extremely large
+number of local minima. However, we will see that local minima are not
+necessarily a major problem because plateaus are an acceptable solution.
+
+Neural networks aren't \textbf{identifiable} there is no single set of parameters
+from a single training set. In fact, if we have $m$ layers with $n$ neurons each,
+there are $n!^m$ ways to arranging the hidden units to obtain equivalent solutions.
+This is called \textbf{weight space symmetry}.
+
+Model identifiability issues mean that there can be an extremely large or even
+uncountably infinite amount of local minima in the cost function of deep models.
+However, these local minima are all equivalent in value and are not a problematic
+form of non-convexity.
+
+Local minima are only truly problematic if they have a much higher cost than the
+global minimum.
+\subsubsection{Saddle points}
+For many high-dimensional non-convex functions, local minima and maxima are in
+fact rare compared to \textbf{saddle points}.
+
+A saddle point is a point where the Hessian matrix has both positive and negative
+eigenvalues and the gradient is zero. We can think of a saddle point as being a
+local minimum along one cross-section of the cost function and a local maximum
+along another.
+
+\begin{figure}[!ht]
+    \centering
+    \includegraphics[width=0.5\textwidth]{img/saddle.png}
+    \caption{Saddle point}
+    \label{fig:saddle}
+\end{figure}
+
+This points are more common in high-dimensional spaces than local minima and they
+are a problem for optimization algorithms because they are points where the gradient
+is zero but they are not a minimum.
+
+For first-order optimization algorithms that use only gradient information, the
+situation is unclear. The gradient can often become very small near a saddle point.
+On the other hand, gradient descent empirically seems to be able to escape saddle
+points in many cases. While, for Newton's Method, saddle points constitute a
+major problem, because it actively seeks solutions at critical points where the
+gradient is zero.
+\subsubsection{Plateaus}
+Another problem that can arise during the training process is the presence of
+\textbf{plateaus} or \textbf{flat regions}. These are regions where the gradient
+is very small and the optimization algorithm can't make progress.
+\subsubsection{Cliffs and exploding gradients}
+Neural networks with many layers often have extremely steep regions reassembling
+cliffs. This regions are the result from the multiplication of many large weights
+together.
+
+An extremely steep cliff structure, the gradient update step can move the
+parameters extremely far, usually jumping off of the cliff structure altogether.
+
+A solution to this is to use the \textbf{gradient clipping heuristic} which
+intervenes to reduce the step size to be small enough that it is less likely to
+go outside the region where the gradient indicates the direction of approximately
+steepest descent.
+\subsubsection{Additional Problems}
+There are other problems that can arise during the training process, such as:
+\begin{itemize}
+    \item \textbf{Long Term Dependencies}: arises when the computational graph
+          is very deep. The result of this problem is vanishing and exploding
+          gradients.
+    \item \textbf{Inexact Gradients}: we usually only have a noisy or even biased
+          estimate of the gradient and the Hessian. Sometimes, gradients for our
+          loss functions are even intractable. Not a big issue in neural network
+          training. Surrogate loss functions tend to perform well enough in practice.
+    \item \textbf{Poor Correspondence between Local and Global Structure}: it is
+          possible to overcome all of the above problems at a single point and
+          still perform poorly if the direction that results in the most
+          improvement locally does not point toward distant regions of much
+          lower cost.
+\end{itemize}
+\begin{note}
+    The initialization is very important.
+\end{note}
+\subsection{Optimization algorithms}
+There are many optimization algorithms that can be used to train deep models.
+In this section, we are going to see some of them.
+\subsubsection{Stochastic Gradient Descent}
+\textbf{Stochastic Gradient Descent} (SGD) is the most used optimization algorithm
+in deep learning. It is based on the idea of computing the gradient of the loss
+function on a mini-batch and then update the weights of the model. We can describe
+the algorithm as follows:
+\begin{itemize}
+    \item Sample a mini-batch of examples from the training set.
+    \item Compute the gradient of the loss function on the minibatch.
+          \begin{equation}
+              g \gets \frac{1}{m} \nabla_\theta \sum_{i=1}^m \mathcal{L}(f(x^{(i)}; \theta), y^{(i)})
+          \end{equation}
+    \item Update the weights of the model using the gradient.
+          \begin{equation}
+              \theta \gets \theta - \epsilon_k g
+          \end{equation}
+\end{itemize}
+It is important to note that the learning rate $\epsilon_k$ is a hyperparameter
+that must be adaptive. This is because the learning rate is a very important
+hyperparameter and it can affect the convergence of the algorithm. A sufficient
+condition for convergence is:
+\begin{equation*}
+    \sum_{k=1}^\infty \epsilon_k = \infty \quad \text{and} \quad \sum_{k=1}^\infty \epsilon_k^2 < \infty
+\end{equation*}
+
+A common way to implement an adaptive learning rate is to use a linear decay
+until the iteration $\tau$. This can be done as follows:
+\begin{equation}
+    \epsilon_k = \left(1 - \alpha\right)\epsilon_0 + \alpha \epsilon_\tau
+\end{equation}
+In this case we have to choose three hyperparameter: $\epsilon_0$, $\epsilon_\tau$
+and $\alpha$. Usually, $\epsilon_\tau$ is chosen to be $1\%$ of $\epsilon_0$.
+
+To choose $\epsilon_0$ we can try to make different run for a fixed number of
+iterations and choose the best one.
+\subsubsection{Momentum}
+\textbf{Momentum} is a method that helps accelerate SGD in the relevant direction
+and dampens oscillations. It is a method that accumulates an exponentially decaying
+average of past gradients and continues to move in their direction.
+
+The update rule for momentum is:
+\begin{equation}
+    \theta \gets \theta + v
+\end{equation}
+where $v$ is the velocity vector and it is defined as:
+\begin{equation}
+    v \gets \alpha v - \epsilon \frac{1}{m} \nabla_\theta \sum_{i=1}^m \mathcal{L}(f(x^{(i)}; \theta), y^{(i)})
+\end{equation}
+where $\alpha$ is the momentum parameter and it is usually set to $0.9$.
+
+This algorithm aims to solve the problem of poor conditioning of the Hessian
+matrix, and the variance of stochastic gradients.
+
+The momentum algorithm can be seen as a ball rolling down a hill. The ball
+gathers momentum as it rolls down the hill, and it continues to move in the
+direction of the momentum even if it encounters a small hill.
+\subsubsection{Delta Bar Delta}
+\textbf{Delta Bar Delta} is a method that adapts the learning rate for each
+parameter. It is based on the following idea:
+\begin{itemize}
+    \item if the partial derivative of the loss function with respect to a
+          parameter remains the same, increase the learning rate.
+    \item otherwise, if that partial derivative changes sign, decrease
+          the learning rate.
+\end{itemize}
+\subsubsection{AdaGrad}
+\textbf{AdaGrad} is a method that adapts the learning rate for each parameter.
+This method scale the gradient according to the historical norms. In this way,
+learning of parameters with high partial derivatives decrease faster.
+
+This method is based on the following idea:
+\begin{itemize}
+    \item Accumulate the square of the gradient into a vector $r$.
+          \begin{equation}
+              r \gets r + g \odot g
+          \end{equation}
+    \item Update the weights element wise.
+          \begin{equation}
+              \Delta\theta \gets - \frac{\epsilon}{\sqrt{r + \epsilon}} \odot g
+          \end{equation}
+    \item Update parameters
+          \begin{equation}
+              \theta \gets \theta + \Delta \theta
+          \end{equation}
+\end{itemize}
+\subsubsection{RMSProp}
+\textbf{RMSProp} is a method that adapts the learning rate for each parameter.
+This method is a modification of AdaGrad to perform better on non-convex problems.
+The main difference is that RMSProp use an exponentially weighted moving average.
+This method is based on the following idea:
+\begin{itemize}
+    \item Accumulate the square of the gradient into a vector $r$.
+          \begin{equation}
+              r \gets \rho r + (1 - \rho) g \odot g
+          \end{equation}
+    \item Update the weights element wise.
+          \begin{equation}
+              \Delta \theta \gets - \frac{\epsilon}{\delta + \sqrt{r}} \odot g
+          \end{equation}
+    \item Update parameters
+          \begin{equation}
+              \theta \gets \theta + \Delta \theta
+          \end{equation}
+\end{itemize}
+\subsubsection{Adam}
+\textbf{Adam} is a variation of RMSProp in which we add the momentum. Also, it
+add a bias correction to the moments to account for their initialization at the
+origin. This method is based on the following idea:
+\begin{itemize}
+    \item Update time step:
+          \begin{equation}
+              t \gets t + 1
+          \end{equation}
+    \item Update biased moment estimates
+          \begin{equation}
+              \begin{split}
+                  s \gets & \rho_1 S + (1 - \rho_1)g          \\
+                  r \gets & \rho_2 r + (1 - \rho_2) g \odot g
+              \end{split}
+          \end{equation}
+    \item Correct biases
+          \begin{equation}
+              \begin{split}
+                  \hat{s} \gets & \frac{S}{1 - \rho_1^t} \\
+                  \hat{r} \gets & \frac{r}{1 - \rho_2^t}
+              \end{split}
+          \end{equation}
+    \item Update parameters
+          \begin{equation}
+              \Delta \theta \gets - \epsilon \frac{\hat{s}}{\delta + \sqrt{\hat{r}}}
+          \end{equation}
+    \item Update model params:
+          \begin{equation}
+              \theta \gets \theta + \Delta \theta
+          \end{equation}
+\end{itemize}
